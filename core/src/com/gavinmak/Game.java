@@ -6,7 +6,6 @@ import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.PerspectiveCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -16,20 +15,11 @@ import com.badlogic.gdx.graphics.g2d.PolygonSpriteBatch;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.graphics.g3d.Environment;
-import com.badlogic.gdx.graphics.g3d.Model;
-import com.badlogic.gdx.graphics.g3d.ModelBatch;
-import com.badlogic.gdx.graphics.g3d.ModelInstance;
-import com.badlogic.gdx.graphics.g3d.particles.influencers.ModelInfluencer;
-import com.badlogic.gdx.graphics.g3d.particles.renderers.ModelInstanceControllerRenderData;
-import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.CatmullRomSpline;
 import com.badlogic.gdx.math.EarClippingTriangulator;
 import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.ShortArray;
-
-import java.awt.event.MouseAdapter;
 
 public class Game extends ApplicationAdapter implements InputProcessor {
 
@@ -38,15 +28,11 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     private BitmapFont font;
 
     private OrthographicCamera camera;
-    private ModelBatch modelBatch;
-    private ModelBuilder modelBuilder;
-    private Model path3d;
-    private ModelInstance modelInstance;
-    private Environment environment;
 
     private Texture charTexture;
     private Sprite charSprite;
-    private Texture platformTexture;
+    private Texture pathTexture;
+    private Texture pathSide;
     private PolygonSprite pathPolySprite;
 
     // game parameters
@@ -65,7 +51,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     private Vector2[] drawnPoints;
     private Vector2[] cp;
 
-    private int k = 200;
+    private int k = 600;
     private int numPointsPath = 8;
     private float pointsYDiff;
     private float pathWidth;
@@ -130,10 +116,24 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         charSprite = new Sprite(charTexture);
 
         Pixmap pix = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
-        pix.setColor(0xFFFFFFFF); // DE is red, AD is green and BE is blue.
+        pix.setColor(0xF5F5F5FF); // DE is red, AD is green and BE is blue.
         pix.fill();
+        pathTexture = new Texture(pix);
 
-        platformTexture = new Texture(pix);
+        pix.dispose();
+
+        pathSide = new Texture(Gdx.files.internal("pathside.png"));
+
+        /*
+        Pixmap pixSide = new Pixmap(15, 400, Pixmap.Format.RGBA8888);
+        pixSide.setColor(0x999999FF);
+        pixSide.fill();
+
+        pathSide = new Texture(pixSide);
+
+        pixSide.dispose();
+        */
+
 
         Gdx.input.setInputProcessor(this);
     }
@@ -141,7 +141,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     @Override
     public void render() {
         // clear screen to make black backdrop
-        Gdx.gl.glClearColor(0.5f, 0f, 0.5f, 0.2f);
+        Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT|GL20.GL_DEPTH_BUFFER_BIT);
 
         if (alive) {
@@ -156,7 +156,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             drawLose();
             drawPlatform();
             drawChar();
-            drawHUD();
         }
 
     }
@@ -197,10 +196,19 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
         EarClippingTriangulator triangulator = new EarClippingTriangulator();
         ShortArray triangleIndices = triangulator.computeTriangles(vert);
-        PolygonRegion polygonRegion = new PolygonRegion(new TextureRegion(platformTexture),
+        PolygonRegion polygonRegion = new PolygonRegion(new TextureRegion(pathTexture),
                 vert, triangleIndices.toArray());
 
         polyBatch.begin();
+
+        for(int i = 0; i < 2 * k - 2; i = i + 2) {
+            if(vert[i + 2] - vert[i] > 0) {
+                if(i > k - 2)
+                    polyBatch.draw(pathSide, vert[i], vert[i + 1] - 600);
+                else
+                    polyBatch.draw(pathSide, vert[i] - 45, vert[i + 1] - 600);
+            }
+        }
 
         pathPolySprite = new PolygonSprite(polygonRegion);
         pathPolySprite.draw(polyBatch);
@@ -210,8 +218,10 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         Intersector check = new Intersector();
 
         // checks if character inside polygon
+        /*
         if (!check.isPointInPolygon(vert, 0, 2 * k, posCharX, screenHeight - posCharY))
             alive = false;
+            */
 
     }
 
@@ -265,7 +275,8 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     @Override
     public void dispose() {
         charTexture.dispose();
-        platformTexture.dispose();
+        pathTexture.dispose();
+        pathSide.dispose();
         font.dispose();
 
         batch.dispose();
