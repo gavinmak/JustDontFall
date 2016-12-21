@@ -27,8 +27,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     private PolygonSpriteBatch polyBatch;
     private BitmapFont font;
 
-    private OrthographicCamera camera;
-
     private Texture charTexture;
     private Sprite charSprite;
     private Texture pathTexture;
@@ -37,7 +35,8 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
     // game parameters
     private boolean alive = true;
-    private int t = 0;
+    private float t = 0;
+    private float dt = 1000;
 
     // screen parameters
     private float screenWidth, screenHeight;
@@ -51,14 +50,17 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     private Vector2[] drawnPoints;
     private Vector2[] cp;
 
-    private int k = 600;
-    private int numPointsPath = 8;
+    private int k = 100;
+    private int numPointsPath = 9;
     private float pointsYDiff;
     private float pathWidth;
 
     private Vector2 measureAngle;
     private Vector2[] pointAngles;
     private float[][] left, right;
+
+    private float currentScore = 0;
+    private boolean hasEnded = false;
 
     @Override
     public void create() {
@@ -71,10 +73,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         screenWidth = Gdx.graphics.getWidth();
         screenHeight = Gdx.graphics.getHeight();
 
-        camera = new OrthographicCamera(screenWidth, screenHeight);
-        camera.position.set(0f, 0f, 10f);
-        camera.lookAt(0f, 0f, 0f);
-
         /*
         batch = new ModelBatch();
         modelBuilder = new ModelBuilder();
@@ -83,7 +81,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         posCharX = screenWidth / 2;
         posCharY = screenHeight * 7 / 8;
 
-        pointsYDiff = screenHeight / 2.5f;
+        pointsYDiff = screenHeight / 3.5f;
         pathWidth = screenWidth * 0.13f;
 
         drawnPoints = new Vector2[k];
@@ -119,21 +117,9 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         pix.setColor(0xF5F5F5FF); // DE is red, AD is green and BE is blue.
         pix.fill();
         pathTexture = new Texture(pix);
-
         pix.dispose();
 
         pathSide = new Texture(Gdx.files.internal("pathside.png"));
-
-        /*
-        Pixmap pixSide = new Pixmap(15, 400, Pixmap.Format.RGBA8888);
-        pixSide.setColor(0x999999FF);
-        pixSide.fill();
-
-        pathSide = new Texture(pixSide);
-
-        pixSide.dispose();
-        */
-
 
         Gdx.input.setInputProcessor(this);
     }
@@ -148,16 +134,15 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             drawPlatform();
             drawChar();
             drawHUD();
-
-            t++;
         }
 
         else {
-            drawLose();
+            dt = Math.max(0, dt - 30);
             drawPlatform();
             drawChar();
         }
 
+        t += dt / 1000;
     }
 
     private void drawChar() {
@@ -168,6 +153,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     }
 
     private void drawPlatform() {
+
         // if the point is below the top of the screen, add a new point
         // need to check the perpendiculars, too
         if(drawnPoints[k-1].y - calcSpeed() < screenHeight + pointsYDiff * 1)
@@ -201,12 +187,15 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
         polyBatch.begin();
 
-        for(int i = 0; i < 2 * k - 2; i = i + 2) {
+        // draw top to down vertices
+        for(int i = k; i < 2 * k - 2; i = i + 2) {
+            // draws if there is a change in x values
             if(vert[i + 2] - vert[i] > 0) {
-                if(i > k - 2)
-                    polyBatch.draw(pathSide, vert[i], vert[i + 1] - 600);
-                else
-                    polyBatch.draw(pathSide, vert[i] - 45, vert[i + 1] - 600);
+                // left vertices
+                polyBatch.draw(pathSide, vert[i], vert[i + 1] - pathSide.getHeight());
+            } else {
+                // right vertices
+                polyBatch.draw(pathSide, vert[2 * k - i] - pathSide.getWidth(), vert[2 * k - i + 1] - pathSide.getHeight());
             }
         }
 
@@ -218,18 +207,29 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         Intersector check = new Intersector();
 
         // checks if character inside polygon
-        /*
-        if (!check.isPointInPolygon(vert, 0, 2 * k, posCharX, screenHeight - posCharY))
+        if (!check.isPointInPolygon(vert, 0, 2 * k, posCharX, screenHeight - posCharY)) {
+            if(alive)
+                currentScore = t;
             alive = false;
-            */
-
+        }
     }
 
     private void drawHUD() {
 
     }
 
-    private float calcSpeed() { return (float)Math.pow(t, 1.6) * 0.13f; }
+    private float calcSpeed() {
+
+        //if(!alive) {
+            //return 300f;
+            //t *= 0.99;
+            //return Math.max((float)Math.pow(t, 1.6) * 0.13f, 0);
+        //}
+
+        return (float)Math.pow(t, 1.6) * 0.13f;
+
+
+    }
 
     private float calcPathVariation() { return Math.max(0.1f, Math.min(t * 0.005f, widthPosVarMax)); }
 
