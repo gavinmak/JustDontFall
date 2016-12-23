@@ -14,6 +14,7 @@ public class AndroidLauncher extends AndroidApplication {
 		config.useImmersiveMode = true;
         config.useAccelerometer = false;
         config.useCompass = false;
+		config.numSamples = 2;
 		config.touchSleepTime = 8;
 		config.useWakelock = true;
 		initialize(new Game(), config);
