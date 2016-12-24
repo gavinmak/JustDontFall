@@ -426,6 +426,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     }
 
     private String createMessage() {
+        int g = 0;
         if (currentScore < 5)
             return "You can do better by literally doing nothing.";
         if (currentScore < 100)
