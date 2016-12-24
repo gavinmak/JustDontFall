@@ -34,6 +34,10 @@ import com.badlogic.gdx.utils.ShortArray;
 
 import java.awt.Font;
 
+import static com.badlogic.gdx.scenes.scene2d.actions.Actions.fadeOut;
+import static com.badlogic.gdx.scenes.scene2d.actions.Actions.scaleBy;
+import static com.badlogic.gdx.scenes.scene2d.actions.Actions.sequence;
+
 public class Game extends ApplicationAdapter implements InputProcessor {
 
     private Stage stage;
@@ -42,8 +46,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     private SpriteBatch batch;
     private PolygonSpriteBatch polyBatch;
 
-    private Texture charTexture;
-    private Sprite charSprite;
     private Texture pathTexture;
     private Texture pathSide;
     private PolygonSprite pathPolySprite;
@@ -57,7 +59,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     private float screenWidth, screenHeight;
 
     // character parameters
-    private TextureRegion playerTextureRegion;
     private Player player;
     private boolean touchedChar = false;
 
@@ -115,7 +116,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
     // buttons
     private ImageButton pauseButton;
-    private TextureRegionDrawable buttonTextureRegionDrawable;
 
     @Override
     public void create() {
@@ -174,27 +174,36 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
             @Override
             public void touchDragged(InputEvent event, float x, float y, int pointer) {
-                if(alive && !paused && pointer == 0 && touchedChar) {
+                if(alive && !paused && pointer < 1 && touchedChar) {
                     player.setPosition(x, y);
                 }
             }
 
             @Override
             public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
-                if(alive && !paused && pointer == 0 && touchedChar) {
+                if(alive && !paused && pointer < 1 && touchedChar) {
                     player.setPosition(x, y);
                     touchedChar = false;
                 }
             }
         });
+
+        /*
+        AlphaAction fadeIn = new AlphaAction();
+        fadeIn.setAlpha(0);
+        fadeIn.setDuration(2000);
+        player.addAction(fadeIn);
+        */
+
         stage.addActor(player);
 
         table = new Table();
         table.setFillParent(true);
 
-        buttonTextureRegionDrawable =
-                new TextureRegionDrawable(new TextureRegion(new Texture(Gdx.files.internal("pause.png"))));
-        pauseButton = new ImageButton(buttonTextureRegionDrawable);
+        TextureRegionDrawable pauseUp = new TextureRegionDrawable(new TextureRegion(new Texture(Gdx.files.internal("pause.png"))));
+        TextureRegionDrawable pauseDown = new TextureRegionDrawable(new TextureRegion(new Texture(Gdx.files.internal("play.png"))));
+
+        pauseButton = new ImageButton(pauseUp, pauseUp, pauseDown);
         pauseButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -247,12 +256,14 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT | (Gdx.graphics.getBufferFormat().coverageSampling?GL20.GL_COVERAGE_BUFFER_BIT_NV:0));
 
         if (alive) {
-
+            // fade in character
         }
 
         else {
             // slow down function
             dt = Math.max(0, dt - 30);
+            pauseButton.getColor().a = 0;
+            drawLose();
         }
 
         drawPlatform();
@@ -270,6 +281,8 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             currentScore = calcDistance() / 100000f;
 
         // need to make platform falling, deployment
+        // change platform colors, 3d?
+        // best score
     }
 
     private void drawHUD() {
@@ -294,7 +307,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
     private void drawPlatform() {
         // if the point is below the top of the screen, add a new point
-        if(drawnPoints[k-1].y - calcSpeed() < screenHeight + pointsYDiff * .6)
+        if(drawnPoints[k-1].y - calcSpeed() < screenHeight + pointsYDiff * 1.4)
             calcPlatform();
 
         calcPathAngle();
@@ -345,7 +358,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
         // checks if character inside polygon
         if (!check.isPointInPolygon(vert, 0, 2 * k, player.posCharX, player.posCharY)) {
-            alive = false;
+            //alive = false;
         }
     }
 
@@ -369,11 +382,11 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
     }
 
-    private float calcSpeed() { return (float)Math.pow(t, 1.6) * 0.2f; }
+    private float calcSpeed() { return (float)Math.pow(t, 1.55) * 0.25f; }
 
-    private float calcSpeedDelay(float d) { return (float)Math.pow(t, 1.6) * 0.13f - d; }
+    private float calcSpeedDelay(float d) { return (float)Math.pow(t, 1.55) * 0.26f - d; }
 
-    private float calcDistance() { return (float)Math.pow(t, 2.6) * 0.05f; }
+    private float calcDistance() { return (float)Math.pow(t, 2.55) * 0.05f; }
 
     private float calcPathVariation() { return Math.max(0.05f, Math.min(t * 0.005f, widthPosVarMax)); }
 
@@ -442,11 +455,10 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
     @Override
     public void dispose() {
-        charTexture.dispose();
         pathTexture.dispose();
         pathSide.dispose();
         scoreFont.dispose();
-        textFont.dispose();
+        textFont.dispose();;
 
         batch.dispose();
         polyBatch.dispose();
