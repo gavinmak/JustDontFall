@@ -13,7 +13,6 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.PolygonRegion;
 import com.badlogic.gdx.graphics.g2d.PolygonSprite;
 import com.badlogic.gdx.graphics.g2d.PolygonSpriteBatch;
-import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
@@ -32,8 +31,6 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.ShortArray;
 
-import java.awt.Font;
-
 import static com.badlogic.gdx.scenes.scene2d.actions.Actions.fadeOut;
 import static com.badlogic.gdx.scenes.scene2d.actions.Actions.scaleBy;
 import static com.badlogic.gdx.scenes.scene2d.actions.Actions.sequence;
@@ -49,7 +46,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     @Override
     public void pause() {
         paused = true;
-
     }
 
     @Override
@@ -62,23 +58,16 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         this.state = s;
     }
 
+    // app parameters
     private State state = State.RUN;
-
     private static Stage stage;
     private static Table table;
 
-
-    private static SpriteBatch batch;
-    private static PolygonSpriteBatch polyBatch;
-
-    private static Texture pathTexture;
-    private static Texture pathSide;
-    private static PolygonSprite pathPolySprite;
-
     // game parameters
     private static boolean alive = true, paused = false;
-    private static int t = 0;
-    private static int dt = 1000;
+    private static float t = 0;
+    private static float dt = 1000;
+    private static int currentScore = 0;
 
     // screen parameters
     private static int screenWidth, screenHeight;
@@ -111,33 +100,41 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     }
 
     // platform parameters
-    private static final float widthPosVarMax = 0.33f;
-    private static Vector2[] drawnPoints;
-    private static Vector2[] cp;
+    private static final float widthPosVarMax = 0.33f;  // amount the path can move left to right
+    private static Vector2[] drawnPoints;               // points drawn between control points
+    private static Vector2[] cp;                        // control points for spline
 
-    private static final int k = 9 * 6;
-    private static final int numPointsPath = 9;
-    private static int pointsYDiff;
-    private int pathWidth;
+    private static final int k = 9 * 20;                // number of points drawn in spine
+    private static final int numPointsPath = 9;         // number of control points in spline
+    private static int pointsYDiff;                     // vertical spacing between each control points
+    private static int pathWidth;
+    private static final int pathHeight = 600;          // side path shade height
 
-    private static Vector2 measureAngle;
+    private static Vector2 measureAngle;                // stores derivatives at each point in spline
     private static Vector2[] pointAngles;
-    private float[] vert;
-    private int[][] left, right;
-    private EarClippingTriangulator triangulator;
-    private Intersector check;
+    private static float[] pathVertices;
+    private static float[] shadeVertices;
+    private static float[][] left, right;
+    private static EarClippingTriangulator triangulator;
+    private static Intersector check;
+    private static CatmullRomSpline<Vector2> platformPath;
 
-    private CatmullRomSpline<Vector2> platformPath;
-
-    private static int currentScore = 0;
-
-    private static BitmapFont scoreFont;
-    private static ShapeRenderer scoreRect;
+    // text
+    private static ShapeRenderer scoreRect;             // draw rectangle in background of scores
     private static int[] rectWidth;
+    private static BitmapFont scoreFont;
     private static GlyphLayout scoreGlyph;
-
     private static BitmapFont textFont;
     private static GlyphLayout textGlyph;
+
+    // sprites and textures
+    private static SpriteBatch batch;
+    private static PolygonSpriteBatch polyBatch;
+    private static Texture pathTexture;
+    private static Texture pathSide, pathSideImage;
+    private static PolygonSprite pathPolySprite;
+    private static PolygonSprite pathPolySpriteLeft;
+
 
     // buttons
     private static ImageButton pauseButton;
@@ -146,40 +143,39 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     public void create() {
         // initialize parameters
         stage = new Stage();
-
-        batch = new SpriteBatch();
         polyBatch = new PolygonSpriteBatch();
+        batch = new SpriteBatch();
 
-        screenWidth = Gdx.graphics.getWidth();
         screenHeight = Gdx.graphics.getHeight();
-
+        screenWidth = Gdx.graphics.getWidth();
         pointsYDiff = (int)(screenHeight / 3.5);
         pathWidth = (int)(screenWidth * 0.13);
 
         drawnPoints = new Vector2[k];
         cp = new Vector2[numPointsPath];
-
         pointAngles = new Vector2[k];
 
+        // initializes beginning path control points, with little to no variation
         for (int p = -2; p < numPointsPath - 2; p++)
             cp[p + 2] = new Vector2(((float)Math.random() * 2 - 1) * calcPathVariation()
                     * screenWidth + screenWidth / 2, p * pointsYDiff);
 
         // initializes a spline which represents path
+        // explained in further detail in calcPlatform()
         platformPath = new CatmullRomSpline<Vector2>(cp, false);
         for (int i = 0; i < k; i++)
         {
             drawnPoints[i] = new Vector2();
             platformPath.valueAt(drawnPoints[i], ((float)i)/((float)k-1));
-
             measureAngle = new Vector2();
             platformPath.derivativeAt(measureAngle, ((float)i)/((float)k-1));
             pointAngles[i] = measureAngle.rotate90(0).nor().scl(pathWidth);
         }
 
-        vert = new float[k * 2];
-        left = new int[k][2];
-        right = new int[k][2];
+        pathVertices = new float[k * 2];
+        left = new float[k][2];
+        right = new float[k][2];
+        shadeVertices = new float[2 * k];
 
         triangulator = new EarClippingTriangulator();
         check = new Intersector();
@@ -221,6 +217,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
                 }
             }
         });
+        stage.addActor(player);
 
         /*
         AlphaAction fadeIn = new AlphaAction();
@@ -229,11 +226,10 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         player.addAction(fadeIn);
         */
 
-        stage.addActor(player);
-
         table = new Table();
         table.setFillParent(true);
 
+        // images for the play/pause button
         TextureRegionDrawable pauseUp = new TextureRegionDrawable(new TextureRegion(new Texture(Gdx.files.internal("pause.png"))));
         TextureRegionDrawable pauseDown = new TextureRegionDrawable(new TextureRegion(new Texture(Gdx.files.internal("play.png"))));
 
@@ -247,12 +243,22 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         stage.addActor(pauseButton);
         table.add(pauseButton).size(screenWidth / 6).expand().bottom().right();
 
+        // texture for path
         Pixmap pix = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
-        pix.setColor(0xFAFAFAFF); // DE is red, AD is green and BE is blue.
+        pix.setColor(0xFAFAFAFF);
         pix.fill();
         pathTexture = new Texture(pix);
         pix.dispose();
 
+        // texture for side of path
+        Pixmap pixSide = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        pixSide.setColor(0xBBBBBBFF);
+        pixSide.fill();
+        pathSide = new Texture(pixSide);
+        pixSide.dispose();
+        pathSideImage = new Texture(Gdx.files.internal("pathside.png"));
+
+        // font for numbers
         FreeTypeFontGenerator scoreGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontGenerator.FreeTypeFontParameter scoreParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
         scoreParameter.size = screenWidth / 6;
@@ -262,6 +268,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         scoreRect = new ShapeRenderer();
         scoreGlyph = new GlyphLayout(scoreFont, "12345");
 
+        // font for letters
         FreeTypeFontGenerator textGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontGenerator.FreeTypeFontParameter textParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
         textParameter.size = screenWidth / 4;
@@ -270,16 +277,15 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         textGenerator.dispose();
         textGlyph = new GlyphLayout(scoreFont, "paused");
 
+        // pre-loads spacing for digits up to six spaces
         rectWidth = new int[6];
         for(int i = 0; i < 6; i++) {
             scoreGlyph = new GlyphLayout(scoreFont, "" + (int)Math.pow(10, i));
             rectWidth[i] = (int)scoreGlyph.width;
         }
 
-        pathSide = new Texture(Gdx.files.internal("pathside.png"));
         stage.addActor(table);
         table.setDebug(true);
-
 
         Gdx.input.setInputProcessor(stage);
     }
@@ -294,13 +300,14 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             case RUN:
                 if (alive) {
                     // fade in character
+
                 } else {
                     // slow down function
-                    dt = Math.max(0, dt - 30);
+                    dt = Math.max(0, dt - 20);
                     pauseButton.getColor().a = 0;
                     drawLose();
                 }
-
+                drawBackground();
                 drawPlatform();
                 drawHUD();
                 stage.draw();
@@ -315,7 +322,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
                     currentScore = (int) calcDistance() / 100000;
 
                 // need to make platform falling, deployment
-                // change platform colors, 3d?
+                // change platform colors
                 // best score
                 break;
 
@@ -327,6 +334,10 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
                 break;
         }
+    }
+
+    private void drawBackground() {
+        
     }
 
     private void drawHUD() {
@@ -356,59 +367,76 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
         calcPathAngle();
 
-        // must register points as vertices
-
+        // registering path vertices
         // first vertex is bottom left
-        vert[0] = left[0][0];
-        vert[1] = left[0][1] - calcSpeed();
+        pathVertices[0] = left[0][0];
+        pathVertices[1] = left[0][1] - calcSpeed();
 
-        // right side up
-        for(int i = 2; i < k - 1; i = i + 2) {
-            vert[i] = right[i][0];
-            vert[i + 1] = right[i][1] - calcSpeed();
+        // vertices for drawing path
+        for(int i = 2; i < k - 1; i += 2) {
+            // right side up
+            pathVertices[i] = right[i][0];
+            pathVertices[i + 1] = right[i][1] - calcSpeed();
         }
 
-        // left side down
-        for(int i = 0; i < k - 1; i = i + 2) {
-            vert[i + k] = left[k - 1 - i][0];
-            vert[i + 1 + k] = left[k - 1 - i][1] - calcSpeed();
+        for(int i = 0; i < k - 1; i += 2) {
+            // left side down
+            pathVertices[i + k] = left[k - 1 - i][0];
+            pathVertices[i + 1 + k] = left[k - 1 - i][1] - calcSpeed();
         }
 
-        ShortArray triangleIndices = triangulator.computeTriangles(vert);
+        ShortArray triangleIndices = triangulator.computeTriangles(pathVertices);
         PolygonRegion polygonRegion = new PolygonRegion(new TextureRegion(pathTexture),
-                vert, triangleIndices.toArray());
+                pathVertices, triangleIndices.toArray());
+
+        // create an identical path shifted down by pathHeight
+        for (int i = 0; i < 2 * k; i += 2) {
+            shadeVertices[i] = pathVertices[i];
+            shadeVertices[i + 1] = pathVertices[i + 1] - pathHeight;
+        }
+
+        ShortArray triangleLeft = triangulator.computeTriangles(shadeVertices);
+        PolygonRegion polygonRegionLeft = new PolygonRegion(new TextureRegion(pathSide),
+                shadeVertices, triangleLeft.toArray());
 
         polyBatch.begin();
-        // draw top to down vertices
-        for(int i = k; i < 2 * k - 2; i = i + 2) {
+
+        // draw path shade
+        pathPolySpriteLeft = new PolygonSprite(polygonRegionLeft);
+        pathPolySpriteLeft.draw(polyBatch);
+
+        // draw rectangles to fill space between path and shifted down path
+        for(int i = k; i < 2 * k - 2; i += 2) {
             // draws if there is a change in x values
-            if(vert[i + 2] - vert[i] > 1) {
-                // left vertices
-                polyBatch.draw(pathSide, vert[i], vert[i + 1] - pathSide.getHeight());
+            if(pathVertices[i + 2] - pathVertices[i] > 0) {
+                polyBatch.draw(pathSideImage, pathVertices[i], pathVertices[i + 1] - pathSideImage.getHeight());
             } else {
-                // right vertices
-                polyBatch.draw(pathSide, vert[2 * k - i] - pathSide.getWidth(),
-                        vert[2 * k - i + 1] - pathSide.getHeight());
+                polyBatch.draw(pathSideImage, pathVertices[2 * k - i] - pathSideImage.getWidth(),
+                        pathVertices[2 * k - i + 1] - pathSideImage.getHeight());
             }
         }
 
+        // draw actual path
         pathPolySprite = new PolygonSprite(polygonRegion);
         pathPolySprite.draw(polyBatch);
+
         polyBatch.end();
 
         // checks if character inside polygon
-        if (!check.isPointInPolygon(vert, 0, 2 * k, player.posCharX, player.posCharY)) {
-            //alive = false;
+        if (!check.isPointInPolygon(pathVertices, 0, 2 * k, player.posCharX, player.posCharY)) {
+            alive = false;
         }
     }
 
     private void drawPause() {
         Gdx.graphics.getGL20().glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
         scoreRect.begin(ShapeRenderer.ShapeType.Filled);
         scoreRect.setColor(new Color(0, 0, 0, 0.6f));
         scoreRect.rect(0, 0, screenWidth, screenHeight);
         scoreRect.end();
+
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         batch.begin();
@@ -424,34 +452,35 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
     private float calcSpeed() { return (float)Math.pow(t, 1.55) * 0.25f; }
 
-    private float calcSpeedDelay(float d) { return (float)Math.pow(t, 1.55) * 0.26f - d; }
-
     private float calcDistance() { return (float)Math.pow(t, 2.55) * 0.05f; }
 
     private float calcPathVariation() { return Math.max(0.05f, Math.min(t * 0.005f, widthPosVarMax)); }
 
+
     private void calcPlatform() {
+        /*
+        adds a point to the platform at the top of the screen, out of the viewport
+        and fills array of angles such to maintain a constant path width
+        */
+
         // shift set of points down to update points
         for (int p = 0; p < cp.length - 1; p++)
             cp[p] = cp[p + 1];
 
-        // generate a new point
+        // generate a new point at top
         cp[cp.length - 1] = new Vector2(((float)Math.random() * 2 - 1) * calcPathVariation()
                 * screenWidth + screenWidth / 2, cp[cp.length - 1].y + pointsYDiff);
-
-        /*
-        CatmullRomSpline<Vector2> platformPath = new CatmullRomSpline<Vector2>(cp, false);*/
 
         // recreate spline and reinitialize drawnPoints
         for (int i = 0; i < k; i++)
         {
+            // fill array with points on spline
             drawnPoints[i] = new Vector2();
             platformPath.valueAt(drawnPoints[i], ((float)i)/((float)k-1));
 
+            // fill angle array with angles to be drawn such that the path width is constant
             measureAngle = new Vector2();
             platformPath.derivativeAt(measureAngle, ((float)i)/((float)k-1));
-
-            // makes perpendicular, makes length of path width
             pointAngles[i] = measureAngle.rotate90(0).nor().scl(pathWidth);
         }
     }
@@ -459,18 +488,18 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     private void calcPathAngle() {
         // initialize left and right perpendicular points
         for(int i = 0; i < k; i++) {
+            // points to left and right are the middle of the path plus or minus the angles
+            // because the vectors are equal length, path width is preserved
             left[i][0] = (int)(drawnPoints[i].x + pointAngles[i].x);
             left[i][1] = (int)(drawnPoints[i].y + pointAngles[i].y);
-
             right[i][0] = (int)(drawnPoints[i].x - pointAngles[i].x);
             right[i][1] = (int)(drawnPoints[i].y - pointAngles[i].y);
         }
     }
 
-    /*
     private String createMessage() {
         if (currentScore < 5)
-            return "You can do better by literally doing nothing.";
+            return "Come on now.";
         if (currentScore < 100)
             return "Baby steps.";
         if (currentScore < 200)
@@ -489,9 +518,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             return "MLG? Probably.";
         else
             return "EZ.";
-
     }
-    */
 
     public void resize (int width, int height) {
         stage.getViewport().update(width, height, true);
@@ -503,7 +530,8 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         pathSide.dispose();
         scoreFont.dispose();
         textFont.dispose();
-
+        scoreRect.dispose();
+        stage.dispose();
         batch.dispose();
         polyBatch.dispose();
     }
