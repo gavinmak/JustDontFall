@@ -40,30 +40,55 @@ import static com.badlogic.gdx.scenes.scene2d.actions.Actions.sequence;
 
 public class Game extends ApplicationAdapter implements InputProcessor {
 
-    private Stage stage;
-    private Table table;
+    public enum State {
+        RUN,
+        LOSE,
+        MENU
+    }
 
-    private SpriteBatch batch;
-    private PolygonSpriteBatch polyBatch;
+    @Override
+    public void pause() {
+        paused = true;
 
-    private Texture pathTexture;
-    private Texture pathSide;
-    private PolygonSprite pathPolySprite;
+    }
+
+    @Override
+    public void resume()
+    {
+        paused = true;
+    }
+
+    public void setGameState(State s) {
+        this.state = s;
+    }
+
+    private State state = State.RUN;
+
+    private static Stage stage;
+    private static Table table;
+
+
+    private static SpriteBatch batch;
+    private static PolygonSpriteBatch polyBatch;
+
+    private static Texture pathTexture;
+    private static Texture pathSide;
+    private static PolygonSprite pathPolySprite;
 
     // game parameters
-    private boolean alive = true, paused = false;
-    private float t = 0;
-    private float dt = 1000;
+    private static boolean alive = true, paused = false;
+    private static int t = 0;
+    private static int dt = 1000;
 
     // screen parameters
-    private float screenWidth, screenHeight;
+    private static int screenWidth, screenHeight;
 
     // character parameters
-    private Player player;
-    private boolean touchedChar = false;
+    private static Player player;
+    private static boolean touchedChar = false;
 
     class Player extends Actor {
-        public float posCharX, posCharY, radius;
+        public int posCharX, posCharY, radius;
         private Vector2[] velChar;
         private ShapeRenderer character;
 
@@ -83,39 +108,39 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             character.end();
             batch.begin();
         }
-
-        public void setPosition(float x, float y) {
-            posCharX = x;
-            posCharY = y;
-        }
     }
 
     // platform parameters
-    private float widthPosVarMax = 0.33f;
-    private Vector2[] drawnPoints;
-    private Vector2[] cp;
+    private static final float widthPosVarMax = 0.33f;
+    private static Vector2[] drawnPoints;
+    private static Vector2[] cp;
 
-    private int k = 9 * 10;
-    private int numPointsPath = 9;
-    private float pointsYDiff;
-    private float pathWidth;
+    private static final int k = 9 * 6;
+    private static final int numPointsPath = 9;
+    private static int pointsYDiff;
+    private int pathWidth;
 
-    private Vector2 measureAngle;
-    private Vector2[] pointAngles;
-    private float[][] left, right;
+    private static Vector2 measureAngle;
+    private static Vector2[] pointAngles;
+    private float[] vert;
+    private int[][] left, right;
+    private EarClippingTriangulator triangulator;
+    private Intersector check;
 
-    private float currentScore = 0;
+    private CatmullRomSpline<Vector2> platformPath;
 
-    private BitmapFont scoreFont;
-    private ShapeRenderer scoreRect;
-    private float[] rectWidth;
-    private GlyphLayout scoreGlyph;
+    private static int currentScore = 0;
 
-    private BitmapFont textFont;
-    private GlyphLayout textGlyph;
+    private static BitmapFont scoreFont;
+    private static ShapeRenderer scoreRect;
+    private static int[] rectWidth;
+    private static GlyphLayout scoreGlyph;
+
+    private static BitmapFont textFont;
+    private static GlyphLayout textGlyph;
 
     // buttons
-    private ImageButton pauseButton;
+    private static ImageButton pauseButton;
 
     @Override
     public void create() {
@@ -128,8 +153,8 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         screenWidth = Gdx.graphics.getWidth();
         screenHeight = Gdx.graphics.getHeight();
 
-        pointsYDiff = screenHeight / 3.5f;
-        pathWidth = screenWidth * 0.13f;
+        pointsYDiff = (int)(screenHeight / 3.5);
+        pathWidth = (int)(screenWidth * 0.13);
 
         drawnPoints = new Vector2[k];
         cp = new Vector2[numPointsPath];
@@ -141,31 +166,38 @@ public class Game extends ApplicationAdapter implements InputProcessor {
                     * screenWidth + screenWidth / 2, p * pointsYDiff);
 
         // initializes a spline which represents path
-        CatmullRomSpline<Vector2> platformPath = new CatmullRomSpline<Vector2>(cp, false);
+        platformPath = new CatmullRomSpline<Vector2>(cp, false);
         for (int i = 0; i < k; i++)
         {
             drawnPoints[i] = new Vector2();
             platformPath.valueAt(drawnPoints[i], ((float)i)/((float)k-1));
+
             measureAngle = new Vector2();
             platformPath.derivativeAt(measureAngle, ((float)i)/((float)k-1));
             pointAngles[i] = measureAngle.rotate90(0).nor().scl(pathWidth);
         }
 
-        left = new float[k][2];
-        right = new float[k][2];
+        vert = new float[k * 2];
+        left = new int[k][2];
+        right = new int[k][2];
+
+        triangulator = new EarClippingTriangulator();
+        check = new Intersector();
 
         calcPathAngle();
 
         player = new Player();
-        player.setPosition(screenWidth / 2, screenHeight * 1 / 8);
-        player.radius = pathWidth *  0.66f;
+        player.posCharX = screenWidth / 2;
+        player.posCharY = screenHeight * 1 / 8;
+        player.radius = (int)(pathWidth * 0.66);
         player.addListener(new InputListener() {
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
                 if(alive && !paused && pointer == 0) {
-                    if(Math.abs(player.posCharX - x) < player.radius * 2 &&
-                            Math.abs(player.posCharY - y) < player.radius * 2) {
-                        player.setPosition(x, y);
+                    if(Math.abs(player.posCharX - x) < player.radius * 3 &&
+                            Math.abs(player.posCharY - y) < player.radius * 3) {
+                        player.posCharX = (int)x;
+                        player.posCharY = (int)y;
                         touchedChar = true;
                     }
                 }
@@ -175,14 +207,16 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             @Override
             public void touchDragged(InputEvent event, float x, float y, int pointer) {
                 if(alive && !paused && pointer < 1 && touchedChar) {
-                    player.setPosition(x, y);
+                    player.posCharX = (int)x;
+                    player.posCharY = (int)y;
                 }
             }
 
             @Override
             public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
                 if(alive && !paused && pointer < 1 && touchedChar) {
-                    player.setPosition(x, y);
+                    player.posCharX = (int)x;
+                    player.posCharY = (int)y;
                     touchedChar = false;
                 }
             }
@@ -211,7 +245,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             }
         });
         stage.addActor(pauseButton);
-        table.add(pauseButton).size(screenWidth / 8).expand().bottom().right();
+        table.add(pauseButton).size(screenWidth / 6).expand().bottom().right();
 
         Pixmap pix = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pix.setColor(0xFAFAFAFF); // DE is red, AD is green and BE is blue.
@@ -219,32 +253,33 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         pathTexture = new Texture(pix);
         pix.dispose();
 
-        FreeTypeFontGenerator scoreGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/RobotoMono-Bold.ttf"));
+        FreeTypeFontGenerator scoreGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontGenerator.FreeTypeFontParameter scoreParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        scoreParameter.size = (int)screenWidth / 8;
+        scoreParameter.size = screenWidth / 6;
         scoreParameter.color = Color.BLACK;
         scoreFont = scoreGenerator.generateFont(scoreParameter);
         scoreGenerator.dispose();
         scoreRect = new ShapeRenderer();
         scoreGlyph = new GlyphLayout(scoreFont, "12345");
 
-        FreeTypeFontGenerator textGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/KumarOne-Regular.ttf"));
+        FreeTypeFontGenerator textGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontGenerator.FreeTypeFontParameter textParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        textParameter.size = (int)screenWidth / 8;
+        textParameter.size = screenWidth / 4;
         textParameter.color = Color.WHITE;
         textFont = scoreGenerator.generateFont(textParameter);
         textGenerator.dispose();
         textGlyph = new GlyphLayout(scoreFont, "paused");
 
-        rectWidth = new float[6];
+        rectWidth = new int[6];
         for(int i = 0; i < 6; i++) {
             scoreGlyph = new GlyphLayout(scoreFont, "" + (int)Math.pow(10, i));
-            rectWidth[i] = scoreGlyph.width;
+            rectWidth[i] = (int)scoreGlyph.width;
         }
 
         pathSide = new Texture(Gdx.files.internal("pathside.png"));
         stage.addActor(table);
         table.setDebug(true);
+
 
         Gdx.input.setInputProcessor(stage);
     }
@@ -255,53 +290,62 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT | (Gdx.graphics.getBufferFormat().coverageSampling?GL20.GL_COVERAGE_BUFFER_BIT_NV:0));
 
-        if (alive) {
-            // fade in character
+        switch (state) {
+            case RUN:
+                if (alive) {
+                    // fade in character
+                } else {
+                    // slow down function
+                    dt = Math.max(0, dt - 30);
+                    pauseButton.getColor().a = 0;
+                    drawLose();
+                }
+
+                drawPlatform();
+                drawHUD();
+                stage.draw();
+
+                if (!paused) {
+                    t += dt / 1000;
+                } else if (alive) {
+                    drawPause();
+                }
+
+                if (dt > 0)
+                    currentScore = (int) calcDistance() / 100000;
+
+                // need to make platform falling, deployment
+                // change platform colors, 3d?
+                // best score
+                break;
+
+            case LOSE:
+
+                break;
+
+            case MENU:
+
+                break;
         }
-
-        else {
-            // slow down function
-            dt = Math.max(0, dt - 30);
-            pauseButton.getColor().a = 0;
-            drawLose();
-        }
-
-        drawPlatform();
-        drawHUD();
-        stage.draw();
-
-        if(!paused) {
-            t += dt / 1000;
-        }
-        else if(alive) {
-            drawPause();
-        }
-
-        if(dt > 0)
-            currentScore = calcDistance() / 100000f;
-
-        // need to make platform falling, deployment
-        // change platform colors, 3d?
-        // best score
     }
 
     private void drawHUD() {
         // draw back rectangle
         scoreRect.setColor(Color.LIGHT_GRAY);
         scoreRect.begin(ShapeRenderer.ShapeType.Filled);
-        scoreRect.rect(0.4f * scoreFont.getCapHeight(), screenHeight - 1.9f * scoreFont.getCapHeight(),
-                rectWidth[Math.max((int)Math.log10(currentScore + 1), 0)] + 0.5f * scoreFont.getCapHeight(), 1.5f * scoreFont.getCapHeight());
+        scoreRect.rect(0.6f * scoreFont.getCapHeight(), screenHeight - 2.1f * scoreFont.getCapHeight(),
+                rectWidth[Math.max((int)Math.log10(currentScore), 0)] + 0.5f * scoreFont.getCapHeight(), 1.5f * scoreFont.getCapHeight());
 
         // draw front rectangle
         scoreRect.setColor(Color.WHITE);
-        scoreRect.rect(0.25f * scoreFont.getCapHeight(), screenHeight - 1.75f * scoreFont.getCapHeight(),
-                rectWidth[Math.max((int)Math.log10(currentScore + 1), 0)] + 0.5f * scoreFont.getCapHeight(), 1.5f * scoreFont.getCapHeight());
+        scoreRect.rect(0.45f * scoreFont.getCapHeight(), screenHeight - 1.95f * scoreFont.getCapHeight(),
+                rectWidth[Math.max((int)Math.log10(currentScore), 0)] + 0.5f * scoreFont.getCapHeight(), 1.5f * scoreFont.getCapHeight());
         scoreRect.end();
 
         // draw score
         batch.begin();
-        scoreFont.draw(batch, String.format("%.0f", currentScore), scoreFont.getCapHeight() / 2,
-                screenHeight - scoreFont.getCapHeight() / 2);
+        scoreFont.draw(batch, "" + currentScore, scoreFont.getCapHeight() * 0.7f,
+                screenHeight - scoreFont.getCapHeight() * 0.7f);
         batch.end();
     }
 
@@ -313,7 +357,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         calcPathAngle();
 
         // must register points as vertices
-        float[] vert = new float[k * 2];
 
         // first vertex is bottom left
         vert[0] = left[0][0];
@@ -331,7 +374,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             vert[i + 1 + k] = left[k - 1 - i][1] - calcSpeed();
         }
 
-        EarClippingTriangulator triangulator = new EarClippingTriangulator();
         ShortArray triangleIndices = triangulator.computeTriangles(vert);
         PolygonRegion polygonRegion = new PolygonRegion(new TextureRegion(pathTexture),
                 vert, triangleIndices.toArray());
@@ -340,7 +382,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         // draw top to down vertices
         for(int i = k; i < 2 * k - 2; i = i + 2) {
             // draws if there is a change in x values
-            if(vert[i + 2] - vert[i] > 0) {
+            if(vert[i + 2] - vert[i] > 1) {
                 // left vertices
                 polyBatch.draw(pathSide, vert[i], vert[i + 1] - pathSide.getHeight());
             } else {
@@ -353,8 +395,6 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         pathPolySprite = new PolygonSprite(polygonRegion);
         pathPolySprite.draw(polyBatch);
         polyBatch.end();
-
-        Intersector check = new Intersector();
 
         // checks if character inside polygon
         if (!check.isPointInPolygon(vert, 0, 2 * k, player.posCharX, player.posCharY)) {
@@ -399,8 +439,10 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         cp[cp.length - 1] = new Vector2(((float)Math.random() * 2 - 1) * calcPathVariation()
                 * screenWidth + screenWidth / 2, cp[cp.length - 1].y + pointsYDiff);
 
+        /*
+        CatmullRomSpline<Vector2> platformPath = new CatmullRomSpline<Vector2>(cp, false);*/
+
         // recreate spline and reinitialize drawnPoints
-        CatmullRomSpline<Vector2> platformPath = new CatmullRomSpline<Vector2>(cp, false);
         for (int i = 0; i < k; i++)
         {
             drawnPoints[i] = new Vector2();
@@ -417,16 +459,16 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     private void calcPathAngle() {
         // initialize left and right perpendicular points
         for(int i = 0; i < k; i++) {
-            left[i][0] = drawnPoints[i].x + pointAngles[i].x;
-            left[i][1] = drawnPoints[i].y + pointAngles[i].y;
+            left[i][0] = (int)(drawnPoints[i].x + pointAngles[i].x);
+            left[i][1] = (int)(drawnPoints[i].y + pointAngles[i].y);
 
-            right[i][0] = drawnPoints[i].x - pointAngles[i].x;
-            right[i][1] = drawnPoints[i].y - pointAngles[i].y;
+            right[i][0] = (int)(drawnPoints[i].x - pointAngles[i].x);
+            right[i][1] = (int)(drawnPoints[i].y - pointAngles[i].y);
         }
     }
 
+    /*
     private String createMessage() {
-        int g = 0;
         if (currentScore < 5)
             return "You can do better by literally doing nothing.";
         if (currentScore < 100)
@@ -449,6 +491,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             return "EZ.";
 
     }
+    */
 
     public void resize (int width, int height) {
         stage.getViewport().update(width, height, true);
@@ -459,7 +502,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         pathTexture.dispose();
         pathSide.dispose();
         scoreFont.dispose();
-        textFont.dispose();;
+        textFont.dispose();
 
         batch.dispose();
         polyBatch.dispose();
