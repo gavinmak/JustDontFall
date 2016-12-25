@@ -2,8 +2,10 @@ package com.gavinmak;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputProcessor;
+import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.FPSLogger;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
@@ -22,14 +24,21 @@ import com.badlogic.gdx.math.EarClippingTriangulator;
 import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.Event;
+import com.badlogic.gdx.scenes.scene2d.EventListener;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Button;
 import com.badlogic.gdx.scenes.scene2d.ui.ImageButton;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.ShortArray;
+
+import static com.badlogic.gdx.utils.Align.bottom;
+import static com.badlogic.gdx.utils.Align.center;
 
 /**
  * Created by gavin on 12/24/16.
@@ -37,24 +46,25 @@ import com.badlogic.gdx.utils.ShortArray;
 
 public class GameScreen implements Screen, InputProcessor{
     final Fall game;
+    public final Fall fall;
 
     // app parameters
     private static Stage stage;
-    private static Table table;
+    private static Table table, endTable;
 
     // game parameters
     private static boolean alive = true, paused = false;
-    private static float t = 0;
-    private static float dt = 1000;
-    private static int currentScore = 0;
+    private static float t = 0, dt = 1000;
+    private static int currentScore = 0, bestScore = 0;
     private ShapeRenderer fade;
+    private static float transitionDelta = 0;
 
     // screen parameters
     private static int screenWidth, screenHeight;
 
     // character parameters
     private static Player player;
-    private static boolean touchedChar = false, letGo = false;
+    private static boolean touchedChar = false;
 
     class Player extends Actor {
         public int posCharX, posCharY, radius;
@@ -92,14 +102,17 @@ public class GameScreen implements Screen, InputProcessor{
 
     private static Vector2 measureAngle;                // stores derivatives at each point in spline
     private static Vector2[] pointAngles;
-    private static float[] pathVertices;
-    private static float[] shadeVertices;
+    private static float[] pathVertices, shadeVertices;
     private static float[][] left, right;
     private static EarClippingTriangulator triangulator;
     private static Intersector check;
     private static CatmullRomSpline<Vector2> platformPath;
 
+    private Color pathPrimary, pathSecondary;
+
     // text
+    FreeTypeFontGenerator fontGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
+    FreeTypeFontGenerator.FreeTypeFontParameter fontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
     private static ShapeRenderer scoreRect;             // draw rectangle in background of scores
     private static int[] rectWidth;
     private static BitmapFont scoreFont;
@@ -110,17 +123,20 @@ public class GameScreen implements Screen, InputProcessor{
     // sprites and textures
     private static SpriteBatch batch;
     private static PolygonSpriteBatch polyBatch;
-    private static Texture pathTexture;
-    private static Texture pathSide, pathSideImage;
-    private static PolygonSprite pathPolySprite;
-    private static PolygonSprite pathPolySpriteLeft;
-
+    private static Texture pathTexture, pathSide, pathSideImage;
+    private static PolygonSprite pathPolySprite, pathPolySpriteLeft;
 
     // buttons
     private static ImageButton pauseButton;
+    private static TextButton restartButton, quitButton;
+    private static TextButton.TextButtonStyle endButtonStyle;
+
+    // debug
+    private FPSLogger fps;
 
     public GameScreen(final Fall game) {
         this.game = game;
+        this.fall = game;
 
         // initialize parameters
         stage = new Stage();
@@ -133,6 +149,9 @@ public class GameScreen implements Screen, InputProcessor{
         screenWidth = Gdx.graphics.getWidth();
         pointsYDiff = (int)(screenHeight / 3.5);
         pathWidth = (int)(screenWidth * 0.13);
+
+        Preferences prefs = Gdx.app.getPreferences("justdontfall");
+        bestScore = prefs.getInteger("hi", 0);
 
         drawnPoints = new Vector2[k];
         cp = new Vector2[numPointsPath];
@@ -177,7 +196,6 @@ public class GameScreen implements Screen, InputProcessor{
                         player.posCharX = (int)x;
                         player.posCharY = (int)y;
                         touchedChar = true;
-                        letGo = false;
                     }
                 }
                 return true;
@@ -197,7 +215,6 @@ public class GameScreen implements Screen, InputProcessor{
                     player.posCharX = (int)x;
                     player.posCharY = (int)y;
                     touchedChar = false;
-                    letGo = true;
                 }
             }
         });
@@ -206,7 +223,6 @@ public class GameScreen implements Screen, InputProcessor{
         table = new Table();
         table.setFillParent(true);
         stage.addActor(table);
-        table.setDebug(true);
 
         // images for the play/pause button
         TextureRegionDrawable pauseUp = new TextureRegionDrawable(new TextureRegion(new Texture(Gdx.files.internal("pause.png"))));
@@ -238,22 +254,16 @@ public class GameScreen implements Screen, InputProcessor{
         pathSideImage = new Texture(Gdx.files.internal("pathside.png"));
 
         // font for numbers
-        FreeTypeFontGenerator scoreGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
-        FreeTypeFontGenerator.FreeTypeFontParameter scoreParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        scoreParameter.size = screenWidth / 6;
-        scoreParameter.color = Color.valueOf("212121");
-        scoreFont = scoreGenerator.generateFont(scoreParameter);
-        scoreGenerator.dispose();
+        fontParameter.size = screenWidth / 6;
+        fontParameter.color = Color.valueOf("212121");
+        scoreFont = fontGenerator.generateFont(fontParameter);
         scoreRect = new ShapeRenderer();
         scoreGlyph = new GlyphLayout(scoreFont, "12345");
 
         // font for letters
-        FreeTypeFontGenerator textGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
-        FreeTypeFontGenerator.FreeTypeFontParameter textParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        textParameter.size = screenWidth / 4;
-        textParameter.color = Color.WHITE;
-        textFont = textGenerator.generateFont(textParameter);
-        textGenerator.dispose();
+        fontParameter.size = screenWidth / 4;
+        fontParameter.color = Color.WHITE;
+        textFont = fontGenerator.generateFont(fontParameter);
         textGlyph = new GlyphLayout(scoreFont, "paused");
 
         // pre-loads spacing for digits up to six spaces
@@ -263,7 +273,56 @@ public class GameScreen implements Screen, InputProcessor{
             rectWidth[i] = (int)scoreGlyph.width;
         }
 
+        pathPrimary = new Color();
+        pathSecondary = new Color();
+
+        endTable = new Table();
+        endTable.setFillParent(true);
+        stage.addActor(endTable);
+
+        endButtonStyle = new TextButton.TextButtonStyle();
+        endButtonStyle.font = textFont;
+        endButtonStyle.downFontColor = Color.DARK_GRAY;
+        endButtonStyle.fontColor = Color.LIGHT_GRAY;
+
+
+        restartButton = new TextButton("restart", endButtonStyle);
+        restartButton.addListener(new InputListener() {
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                // restartButton.setColor(getColor(currentScore));
+                return true;
+            }
+
+            @Override
+            public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+
+            }
+        });
+
+        endTable.add(restartButton).expand().padTop(screenHeight / 8).row();
+
+        quitButton = new TextButton("give up", endButtonStyle);
+        quitButton.addListener(new InputListener() {
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                // restartButton.setColor(getColor(currentScore));
+                return true;
+            }
+
+            @Override
+            public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+
+            }
+        });
+        endTable.add(quitButton).expand().padBottom(screenHeight / 8);
+        endTable.setVisible(false);
+
+        endTable.debug();
+
         Gdx.input.setInputProcessor(stage);
+
+        fps = new FPSLogger();
     }
 
     @Override
@@ -273,48 +332,67 @@ public class GameScreen implements Screen, InputProcessor{
 
     @Override
     public void render(float delta) {
+        fps.log();
         // clear screen to make black backdrop
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT |
                 (Gdx.graphics.getBufferFormat().coverageSampling?GL20.GL_COVERAGE_BUFFER_BIT_NV:0));
 
-        if (alive) {
-            // fade in character
-        } else {
-            // slow down function
-            //dt = Math.max(0, dt - 20);
-            pauseButton.getColor().a = 0;
-            drawLose();
-        }
         drawBackground();
         drawPlatform();
         drawHUD();
         stage.draw();
 
-        if (!paused) {
+        if(!paused) {
             t += dt / 1000;
-        } else if (alive) {
+        } else if(alive) {
             drawPause();
         }
 
-        if (letGo)
+        // fade in black screen
+        /*
+        Gdx.graphics.getGL20().glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        fade.begin(ShapeRenderer.ShapeType.Filled);
+        if(alive)
+            fade.setColor(new Color(0, 0, 0, 1 - transitionDelta / 100f));
+        else
+            fade.setColor(new Color(0, 0, 0, 0));
+        fade.rect(0, 0, screenWidth, screenHeight);
+        fade.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        */
 
+        if(alive) {
+            table.setVisible(true);
+            endTable.setVisible(false);
+        }
+        else {
+            table.setVisible(false);
+            endTable.setVisible(true);
+            pauseButton.setVisible(false);
 
-        if (dt > 0)
+            dt = Math.max(0, dt - 20);
+            if(dt == 0) {
+                // update current score to high
+                if(currentScore > bestScore) {
+                    Preferences prefs = Gdx.app.getPreferences("justdontfall");
+                    prefs.putInteger("hi", currentScore);
+                    prefs.flush();
+                }
+            }
+            //drawLose();
+        }
+
+        if(dt > 0)
             currentScore = (int) calcDistance() / 100000;
 
         // need to make platform falling, deployment
         // change platform colors
-        // best score
+        // best score animation, sound?
 
-        // fade in black screen
-        Gdx.graphics.getGL20().glEnable(GL20.GL_BLEND);
-        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-        fade.begin(ShapeRenderer.ShapeType.Filled);
-        fade.setColor(new Color(0, 0, 0, 1 - t / 100f));
-        fade.rect(0, 0, screenWidth, screenHeight);
-        fade.end();
-        Gdx.gl.glDisable(GL20.GL_BLEND);
+        // keeps a steady track for animations
+        // transitionDelta += 1;
     }
 
     private void drawBackground() {
@@ -403,9 +481,10 @@ public class GameScreen implements Screen, InputProcessor{
 
         polyBatch.end();
 
-        // checks if character inside polygon
-        if (!check.isPointInPolygon(pathVertices, 0, 2 * k, player.posCharX, player.posCharY)) {
+        // checks if character inside polygon, goes through only once
+        if(!check.isPointInPolygon(pathVertices, 0, 2 * k, player.posCharX, player.posCharY) && alive) {
             alive = false;
+            transitionDelta = 0;
         }
     }
 
@@ -428,12 +507,37 @@ public class GameScreen implements Screen, InputProcessor{
     }
 
     private void drawLose() {
+        /*
+        fontParameter.color.a = transitionDelta / 200;
+        textFont = fontGenerator.generateFont(fontParameter);
+        */
 
+        batch.begin();
+        textGlyph.setText(textFont, "restart");
+        textFont.draw(batch, "restart", screenWidth / 2 - textGlyph.width / 2,
+                screenHeight * 0.66f + textGlyph.height / 2);
+        textGlyph.setText(textFont, "give up");
+        textFont.draw(batch, "give up", screenWidth / 2 - textGlyph.width / 2,
+                screenHeight * 0.33f + textGlyph.height / 2);
+        batch.end();
+    }
+
+    private void resetGame() {
+        t = 0;
+        transitionDelta = 0;
+        dt = 1000;
+        player.posCharY = pathHeight / 2;
+        player.posCharX = pathWidth / 2;
+        alive = true;
+        paused = false;
+        touchedChar = false;
+        pauseButton.setVisible(true);
+        pauseButton.setChecked(false);
     }
 
     private float calcSpeed() { return (float)Math.pow(t, 1.58) * 0.2f; }
 
-    private float calcDistance() { return (float)Math.pow(t, 2.58) * 0.15f; }
+    private float calcDistance() { return (float)Math.pow(t, 2.58) * 0.2f; }
 
     private float calcPathVariation() { return Math.max(0.05f, Math.min(t * 0.005f, widthPosVarMax)); }
 
@@ -478,27 +582,69 @@ public class GameScreen implements Screen, InputProcessor{
         }
     }
 
-    private String createMessage() {
-        if (currentScore < 5)
+    /*
+    private String createMessage(int score) {
+        if(score < 500)
             return "Come on now.";
-        if (currentScore < 100)
+
+        else if(score < 1000)
             return "Baby steps.";
-        if (currentScore < 200)
+
+        else if(score < 2000)
             return "Eh.";
-        if (currentScore == 420)
-            return "420 blaze it";
-        if (currentScore < 500)
+
+        else if(score < 3000)
             return "You're getting there. Kinda.";
-        if (currentScore < 1000)
+
+        else if(score < 4000)
             return "Good, not great.";
-        if (currentScore < 2000)
+
+        else if(score < 5000)
             return "Okay, I see you.";
-        if (currentScore < 3000)
+
+        else if(score < 6000)
             return "You're good, huh.";
-        if (currentScore < 4000)
+
+        else if(score < 7000)
             return "MLG? Probably.";
+
         else
             return "EZ.";
+    }
+    */
+
+    private Color getColor(int score) {
+        if(score < 500)
+            // grey
+            return Color.valueOf("#9E9E9E");
+
+        else if(score < 1000)
+            // yellow
+            return Color.valueOf("");
+
+        else if(score < 2000)
+            // orange
+            return Color.valueOf("#FF9800");
+
+        else if(score < 3000)
+            // green
+            return Color.valueOf("#4CAF50");
+
+        else if(score < 4000)
+            // blue
+            return Color.valueOf("#2196F3");
+
+        else if(score < 5000)
+            // purple
+            return Color.valueOf("#9C27B0");
+
+        else if(score < 6000)
+            // red
+            return Color.valueOf("#F44336");
+
+        else
+            // black
+            return Color.valueOf("#000000");
     }
 
     @Override
@@ -526,15 +672,26 @@ public class GameScreen implements Screen, InputProcessor{
     @Override
     public void pause() {
         paused = true;
+        pauseButton.setChecked(true);
     }
 
     @Override
     public void resume()
     {
         paused = true;
+        pauseButton.setChecked(true);
     }
 
     public boolean touchDown(int x, int y, int pointer, int button) {
+        // need to implement in grid
+        if(!alive) {
+            if(y > screenWidth / 2)
+                resetGame();
+            else {
+                fall.setScreen(new GameScreen(fall));
+                dispose();
+            }
+        }
     return true;
 }
 
