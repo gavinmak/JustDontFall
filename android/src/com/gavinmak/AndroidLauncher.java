@@ -4,7 +4,6 @@ import android.os.Bundle;
 
 import com.badlogic.gdx.backends.android.AndroidApplication;
 import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration;
-import com.gavinmak.Game;
 
 public class AndroidLauncher extends AndroidApplication {
 	@Override
@@ -17,7 +16,6 @@ public class AndroidLauncher extends AndroidApplication {
 		config.numSamples = 2;
 		config.touchSleepTime = 8;
 		config.useWakelock = true;
-		initialize(new Game(), config);
-
+		initialize(new Fall(), config);
 	}
 }

@@ -1,8 +1,8 @@
 package com.gavinmak;
 
-import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputProcessor;
+import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Pixmap;
@@ -31,35 +31,14 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.ShortArray;
 
-import static com.badlogic.gdx.scenes.scene2d.actions.Actions.fadeOut;
-import static com.badlogic.gdx.scenes.scene2d.actions.Actions.scaleBy;
-import static com.badlogic.gdx.scenes.scene2d.actions.Actions.sequence;
+/**
+ * Created by gavin on 12/24/16.
+ */
 
-public class Game extends ApplicationAdapter implements InputProcessor {
-
-    public enum State {
-        RUN,
-        LOSE,
-        MENU
-    }
-
-    @Override
-    public void pause() {
-        paused = true;
-    }
-
-    @Override
-    public void resume()
-    {
-        paused = true;
-    }
-
-    public void setGameState(State s) {
-        this.state = s;
-    }
+public class GameScreen implements Screen, InputProcessor{
+    final Fall game;
 
     // app parameters
-    private State state = State.RUN;
     private static Stage stage;
     private static Table table;
 
@@ -68,13 +47,14 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     private static float t = 0;
     private static float dt = 1000;
     private static int currentScore = 0;
+    private ShapeRenderer fade;
 
     // screen parameters
     private static int screenWidth, screenHeight;
 
     // character parameters
     private static Player player;
-    private static boolean touchedChar = false;
+    private static boolean touchedChar = false, letGo = false;
 
     class Player extends Actor {
         public int posCharX, posCharY, radius;
@@ -139,12 +119,15 @@ public class Game extends ApplicationAdapter implements InputProcessor {
     // buttons
     private static ImageButton pauseButton;
 
-    @Override
-    public void create() {
+    public GameScreen(final Fall game) {
+        this.game = game;
+
         // initialize parameters
         stage = new Stage();
         polyBatch = new PolygonSpriteBatch();
         batch = new SpriteBatch();
+
+        fade = new ShapeRenderer();
 
         screenHeight = Gdx.graphics.getHeight();
         screenWidth = Gdx.graphics.getWidth();
@@ -175,8 +158,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         pathVertices = new float[k * 2];
         left = new float[k][2];
         right = new float[k][2];
-        shadeVertices = new float[2 * k];
-
+        shadeVertices = new float[k * 2];
         triangulator = new EarClippingTriangulator();
         check = new Intersector();
 
@@ -184,7 +166,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
         player = new Player();
         player.posCharX = screenWidth / 2;
-        player.posCharY = screenHeight * 1 / 8;
+        player.posCharY = screenHeight / 2;
         player.radius = (int)(pathWidth * 0.66);
         player.addListener(new InputListener() {
             @Override
@@ -195,6 +177,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
                         player.posCharX = (int)x;
                         player.posCharY = (int)y;
                         touchedChar = true;
+                        letGo = false;
                     }
                 }
                 return true;
@@ -214,20 +197,16 @@ public class Game extends ApplicationAdapter implements InputProcessor {
                     player.posCharX = (int)x;
                     player.posCharY = (int)y;
                     touchedChar = false;
+                    letGo = true;
                 }
             }
         });
         stage.addActor(player);
 
-        /*
-        AlphaAction fadeIn = new AlphaAction();
-        fadeIn.setAlpha(0);
-        fadeIn.setDuration(2000);
-        player.addAction(fadeIn);
-        */
-
         table = new Table();
         table.setFillParent(true);
+        stage.addActor(table);
+        table.setDebug(true);
 
         // images for the play/pause button
         TextureRegionDrawable pauseUp = new TextureRegionDrawable(new TextureRegion(new Texture(Gdx.files.internal("pause.png"))));
@@ -252,7 +231,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
         // texture for side of path
         Pixmap pixSide = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
-        pixSide.setColor(0xBBBBBBFF);
+        pixSide.setColor(0xBDBDBDFF);
         pixSide.fill();
         pathSide = new Texture(pixSide);
         pixSide.dispose();
@@ -262,7 +241,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         FreeTypeFontGenerator scoreGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontGenerator.FreeTypeFontParameter scoreParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
         scoreParameter.size = screenWidth / 6;
-        scoreParameter.color = Color.BLACK;
+        scoreParameter.color = Color.valueOf("212121");
         scoreFont = scoreGenerator.generateFont(scoreParameter);
         scoreGenerator.dispose();
         scoreRect = new ShapeRenderer();
@@ -273,7 +252,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         FreeTypeFontGenerator.FreeTypeFontParameter textParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
         textParameter.size = screenWidth / 4;
         textParameter.color = Color.WHITE;
-        textFont = scoreGenerator.generateFont(textParameter);
+        textFont = textGenerator.generateFont(textParameter);
         textGenerator.dispose();
         textGlyph = new GlyphLayout(scoreFont, "paused");
 
@@ -284,60 +263,62 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             rectWidth[i] = (int)scoreGlyph.width;
         }
 
-        stage.addActor(table);
-        table.setDebug(true);
-
         Gdx.input.setInputProcessor(stage);
     }
 
     @Override
-    public void render() {
+    public void show() {
+
+    }
+
+    @Override
+    public void render(float delta) {
         // clear screen to make black backdrop
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT | (Gdx.graphics.getBufferFormat().coverageSampling?GL20.GL_COVERAGE_BUFFER_BIT_NV:0));
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT |
+                (Gdx.graphics.getBufferFormat().coverageSampling?GL20.GL_COVERAGE_BUFFER_BIT_NV:0));
 
-        switch (state) {
-            case RUN:
-                if (alive) {
-                    // fade in character
-
-                } else {
-                    // slow down function
-                    dt = Math.max(0, dt - 20);
-                    pauseButton.getColor().a = 0;
-                    drawLose();
-                }
-                drawBackground();
-                drawPlatform();
-                drawHUD();
-                stage.draw();
-
-                if (!paused) {
-                    t += dt / 1000;
-                } else if (alive) {
-                    drawPause();
-                }
-
-                if (dt > 0)
-                    currentScore = (int) calcDistance() / 100000;
-
-                // need to make platform falling, deployment
-                // change platform colors
-                // best score
-                break;
-
-            case LOSE:
-
-                break;
-
-            case MENU:
-
-                break;
+        if (alive) {
+            // fade in character
+        } else {
+            // slow down function
+            //dt = Math.max(0, dt - 20);
+            pauseButton.getColor().a = 0;
+            drawLose();
         }
+        drawBackground();
+        drawPlatform();
+        drawHUD();
+        stage.draw();
+
+        if (!paused) {
+            t += dt / 1000;
+        } else if (alive) {
+            drawPause();
+        }
+
+        if (letGo)
+
+
+        if (dt > 0)
+            currentScore = (int) calcDistance() / 100000;
+
+        // need to make platform falling, deployment
+        // change platform colors
+        // best score
+
+        // fade in black screen
+        Gdx.graphics.getGL20().glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        fade.begin(ShapeRenderer.ShapeType.Filled);
+        fade.setColor(new Color(0, 0, 0, 1 - t / 100f));
+        fade.rect(0, 0, screenWidth, screenHeight);
+        fade.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     private void drawBackground() {
-        
+
     }
 
     private void drawHUD() {
@@ -362,7 +343,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
     private void drawPlatform() {
         // if the point is below the top of the screen, add a new point
-        if(drawnPoints[k-1].y - calcSpeed() < screenHeight + pointsYDiff * 1.4)
+        if(drawnPoints[k-1].y - calcSpeed() < screenHeight + pointsYDiff * 1.35)
             calcPlatform();
 
         calcPathAngle();
@@ -450,9 +431,9 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
     }
 
-    private float calcSpeed() { return (float)Math.pow(t, 1.55) * 0.25f; }
+    private float calcSpeed() { return (float)Math.pow(t, 1.58) * 0.2f; }
 
-    private float calcDistance() { return (float)Math.pow(t, 2.55) * 0.05f; }
+    private float calcDistance() { return (float)Math.pow(t, 2.58) * 0.15f; }
 
     private float calcPathVariation() { return Math.max(0.05f, Math.min(t * 0.005f, widthPosVarMax)); }
 
@@ -520,8 +501,14 @@ public class Game extends ApplicationAdapter implements InputProcessor {
             return "EZ.";
     }
 
-    public void resize (int width, int height) {
-        stage.getViewport().update(width, height, true);
+    @Override
+    public void resize(int width, int height) {
+
+    }
+
+    @Override
+    public void hide() {
+
     }
 
     @Override
@@ -536,9 +523,20 @@ public class Game extends ApplicationAdapter implements InputProcessor {
         polyBatch.dispose();
     }
 
-    public boolean touchDown(int x, int y, int pointer, int button) {
-        return true;
+    @Override
+    public void pause() {
+        paused = true;
     }
+
+    @Override
+    public void resume()
+    {
+        paused = true;
+    }
+
+    public boolean touchDown(int x, int y, int pointer, int button) {
+    return true;
+}
 
     public boolean touchUp(int x, int y, int pointer, int button) {
         return true;
