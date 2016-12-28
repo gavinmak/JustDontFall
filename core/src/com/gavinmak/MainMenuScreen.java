@@ -14,31 +14,29 @@ import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 
-import static com.badlogic.gdx.scenes.scene2d.ui.Table.Debug.table;
-
 /**
  * Created by gavin on 12/24/16.
  */
 
 public class MainMenuScreen implements Screen{
     public final Fall fall;
-    public OrthographicCamera camera;
+    public static OrthographicCamera camera;
     private static Stage stage;
     private static Table table;
     private static final int screenWidth = Gdx.graphics.getWidth(),
             screenHeight = Gdx.graphics.getHeight();
 
-    private static float alpha = 0f;
-    private ShapeRenderer fade;
-    private static boolean fadeStarted = false;
+    private float alpha = 0f;
+    private static ShapeRenderer fade;
+    private boolean fadeStarted = false;
 
     private int bestScore;
     private static String startMessage = "";
-    private BitmapFont textFont, scoreFont, startFont;
+    private static BitmapFont textFont, scoreFont, startFont;
     private static GlyphLayout scoreGlyph;
 
-    private TextButton.TextButtonStyle style;
-    private TextButton startButton;
+    private static TextButton.TextButtonStyle style;
+    private static TextButton startButton;
 
 
     public MainMenuScreen(final Fall gam) {
@@ -60,7 +58,7 @@ public class MainMenuScreen implements Screen{
         textParameter.color = Color.valueOf("#212121");
         textFont = textGenerator.generateFont(textParameter);
 
-        textParameter.size = (int)(screenWidth * 0.4);
+        textParameter.size = (int)(screenWidth * 0.3);
         textParameter.color = getColor(bestScore);
         scoreFont = textGenerator.generateFont(textParameter);
 
@@ -73,7 +71,7 @@ public class MainMenuScreen implements Screen{
         camera.setToOrtho(false, screenWidth, screenHeight);
 
         startFont = new BitmapFont();
-        textParameter.size = (int)(screenWidth * 0.25);
+        textParameter.size = (int)(screenWidth * 0.2);
         startFont = textGenerator.generateFont(textParameter);
         textGenerator.dispose();
 
@@ -91,14 +89,9 @@ public class MainMenuScreen implements Screen{
                 fadeStarted = true;
                 return true;
             }
-
-            @Override
-            public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
-            }
         });
 
         table.add(startButton).expand().bottom().right();
-        table.debug();
 
         Gdx.input.setInputProcessor(stage);
     }
@@ -120,21 +113,20 @@ public class MainMenuScreen implements Screen{
         Gdx.graphics.getGL20().glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         fade.begin(ShapeRenderer.ShapeType.Filled);
-        fade.setColor(new Color(0, 0, 0, alpha));
+        fade.setColor(new Color(0, 0, 0, alpha - 0.2f));
         fade.rect(0, 0, screenWidth, screenHeight);
         fade.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         if(fadeStarted)
-            alpha += 0.025;
+            alpha += 0.02;
 
-        if(alpha > 1) {
+        if(alpha > 1.2) {
             fall.setScreen(new GameScreen(fall));
-            dispose();
         }
     }
 
-    private void randWord() {
+    private static void randWord() {
         int r = (int)Math.floor(Math.random() * 6);
         switch (r) {
             case 0: startMessage = ">okay"; break;
@@ -146,38 +138,42 @@ public class MainMenuScreen implements Screen{
         }
     }
 
-    private Color getColor(int score) {
-        if(score < 500)
+    private static Color getColor(int score) {
+        if(score < 1000) {
             // grey
-            return Color.valueOf("#9E9E9E");
+            return Color.valueOf("#555555");
+        }
 
-        else if(score < 1000)
+        else if(score < 2000) {
             // yellow
-            return Color.valueOf("");
+            return Color.valueOf("#ff3b62");
+        }
 
-        else if(score < 2000)
-            // orange
-            return Color.valueOf("#FF9800");
-
-        else if(score < 3000)
-            // green
-            return Color.valueOf("#4CAF50");
-
-        else if(score < 4000)
+        else if(score < 3000) {
             // blue
-            return Color.valueOf("#2196F3");
+            return Color.valueOf("#FF42A7");
+        }
 
-        else if(score < 5000)
+        else if(score < 4000) {
             // purple
-            return Color.valueOf("#9C27B0");
+            return Color.valueOf("#FFE65b");
+        }
 
-        else if(score < 6000)
+        else if(score < 5000) {
+            // orange
+            return Color.valueOf("#02b042");
+        }
+
+        else if(score < 6000) {
             // red
-            return Color.valueOf("#F44336");
+            return Color.valueOf("#53FF53");
+        }
 
-        else
+        else {
             // black
-            return Color.valueOf("#000000");
+            return Color.valueOf("#e0e0e0");
+        }
+
     }
 
     @Override
