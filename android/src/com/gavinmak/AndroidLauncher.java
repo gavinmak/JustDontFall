@@ -15,6 +15,7 @@ public class AndroidLauncher extends AndroidApplication {
         config.useCompass = false;
 		config.numSamples = 2;
 		config.touchSleepTime = 8;
+		config.disableAudio = true;
 		config.useWakelock = true;
 		initialize(new Fall(), config);
 	}

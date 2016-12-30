@@ -110,6 +110,7 @@ public class MainMenuScreen implements Screen{
 
         stage.draw();
 
+        // black screen fade
         Gdx.graphics.getGL20().glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         fade.begin(ShapeRenderer.ShapeType.Filled);
@@ -118,14 +119,18 @@ public class MainMenuScreen implements Screen{
         fade.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
+        // begins the fade, increases opacity of black screen
         if(fadeStarted)
             alpha += 0.02;
 
+        // once the fade is done, start a game screen
         if(alpha > 1.2) {
             fall.setScreen(new GameScreen(fall));
+            dispose();
         }
     }
 
+    // picks a random phrase for the start message
     private static void randWord() {
         int r = (int)Math.floor(Math.random() * 6);
         switch (r) {
@@ -138,39 +143,33 @@ public class MainMenuScreen implements Screen{
         }
     }
 
+    // sets the color for the score text and start text
     private static Color getColor(int score) {
         if(score < 1000) {
-            // grey
             return Color.valueOf("#555555");
         }
 
         else if(score < 2000) {
-            // yellow
-            return Color.valueOf("#ff3b62");
+            return Color.valueOf("#FF00900");
         }
 
         else if(score < 3000) {
-            // blue
-            return Color.valueOf("#FF42A7");
+            return Color.valueOf("#FF9200");
         }
 
         else if(score < 4000) {
-            // purple
-            return Color.valueOf("#FFE65b");
+            return Color.valueOf("#FFD300");
         }
 
         else if(score < 5000) {
-            // orange
-            return Color.valueOf("#02b042");
+            return Color.valueOf("#CCF600");
         }
 
         else if(score < 6000) {
-            // red
-            return Color.valueOf("#53FF53");
+            return Color.valueOf("#00CC00");
         }
 
         else {
-            // black
             return Color.valueOf("#e0e0e0");
         }
 
@@ -204,6 +203,8 @@ public class MainMenuScreen implements Screen{
 
     @Override
     public void dispose() {
-
+        stage.dispose();
+        textFont.dispose();
+        scoreFont.dispose();
     }
 }

@@ -59,17 +59,13 @@ public class GameScreen implements Screen, InputProcessor{
 
     // character parameters
     private static Player player;
-    private ScaleByAction playerDeath;
-    private static boolean touchedChar = false;
 
     class Player extends Actor {
         public int posCharX, posCharY, radius;
-        private Vector2[] velChar;
         private ShapeRenderer character;
 
         public Player() {
             character = new ShapeRenderer();
-            velChar = new Vector2[2];
         }
 
         @Override
@@ -89,7 +85,7 @@ public class GameScreen implements Screen, InputProcessor{
     private static Vector2[] drawnPoints;               // points drawn between control points
     private static Vector2[] cp;                        // control points for spline
 
-    private static final int k = 9 * 20;                // number of points drawn in spine
+    private static final int k = 9 * 16;                // number of points drawn in spine
     private static final int numPointsPath = 9;         // number of control points in spline
     private static int pointsYDiff;                     // vertical spacing between each control points
     private static int pathWidth;
@@ -200,11 +196,10 @@ public class GameScreen implements Screen, InputProcessor{
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
                 if(alive && !paused) {
-                    if(Math.abs(player.posCharX - x) < player.radius * 2 &&
-                            Math.abs(player.posCharY - y) < player.radius * 2) {
+                    if(Math.abs(player.posCharX - x) < player.radius * 1.5 &&
+                            Math.abs(player.posCharY - y) < player.radius * 1.5) {
                         player.posCharX = (int)x;
                         player.posCharY = (int)y;
-                        touchedChar = true;
                     }
                 }
                 return true;
@@ -212,7 +207,7 @@ public class GameScreen implements Screen, InputProcessor{
 
             @Override
             public void touchDragged(InputEvent event, float x, float y, int pointer) {
-                if(alive && !paused && touchedChar) {
+                if(alive && !paused) {
                     player.posCharX = (int)x;
                     player.posCharY = (int)y;
                 }
@@ -220,15 +215,12 @@ public class GameScreen implements Screen, InputProcessor{
 
             @Override
             public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
-                if(alive && !paused && touchedChar) {
+                if(alive && !paused) {
                     player.posCharX = (int)x;
                     player.posCharY = (int)y;
-                    touchedChar = false;
                 }
             }
         });
-        playerDeath = new ScaleByAction();
-        playerDeath.setAmount(-10);
         stage.addActor(player);
 
         table = new Table();
@@ -306,6 +298,7 @@ public class GameScreen implements Screen, InputProcessor{
             @Override
             public void run() {
                 resetGame();
+                dispose();
                 fall.setScreen(new MainMenuScreen(fall));
             }
         };
@@ -342,7 +335,7 @@ public class GameScreen implements Screen, InputProcessor{
 
     @Override
     public void render(float delta) {
-        delta = Math.max(delta, 0.0166666f);
+        delta = Math.max(delta, 1/60);
         // clear screen
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT |
@@ -370,7 +363,6 @@ public class GameScreen implements Screen, InputProcessor{
             t += dt / 1000;
             colorActionBackground.act(delta);
             count += delta;
-
         } else if(alive) {
             drawPause();
         }
@@ -384,21 +376,23 @@ public class GameScreen implements Screen, InputProcessor{
             endTable.setVisible(true);
             pauseButton.setVisible(false);
 
+            // if dead, slow down the velocity until it equals 0
             dt = Math.max(0, dt - 30);
         }
 
+        // if still moving, set current score
         if(dt > 0)
             currentScore = (int) calcDistance() / 100;
 
-        // keeps a steady track for animations
+        // keeps a steady counter for animations
         transitionDelta += 1;
 
-        if(count >= 36.3) {
+        // once the animation ends, change the colors
+        if(count >= 36.4) {
             count = 0;
             colorActionBackground.reset();
             changeColors();
         }
-
 
     }
 
@@ -498,8 +492,8 @@ public class GameScreen implements Screen, InputProcessor{
 
         // checks if character inside polygon, goes through only once
         if(!check.isPointInPolygon(pathVertices, 0, 2 * k, player.posCharX, player.posCharY) && alive) {
-            //alive = false;
-            //transitionDelta = 0;
+            alive = false;
+            transitionDelta = 0;
         }
     }
 
@@ -541,7 +535,6 @@ public class GameScreen implements Screen, InputProcessor{
         player.posCharX = screenWidth / 2;
         alive = true;
         paused = false;
-        touchedChar = false;
         pauseButton.setVisible(true);
         pauseButton.setChecked(false);
         endTable.setVisible(false);
@@ -610,7 +603,7 @@ public class GameScreen implements Screen, InputProcessor{
         }
     }
 
-    /* calculates the perpendicular angle of each point on the path */
+    // calculates the perpendicular angle of each point on the path
     private void calcPathAngle() {
         // initialize left and right perpendicular points
         for(int i = 0; i < k; i++) {
@@ -623,7 +616,7 @@ public class GameScreen implements Screen, InputProcessor{
         }
     }
 
-    /* updates the colors */
+    // updates the colors
     private void changeColors() {
         getColor(currentScore);
         pix.setColor(primaryColor);
@@ -634,87 +627,69 @@ public class GameScreen implements Screen, InputProcessor{
         pix.fill();
         pathSide = new Texture(pix);
 
-        //colorActionBackground.reset();
-        colorActionBackground.setDuration(36.3f);
+        colorActionBackground.setDuration(36.4f);
         colorActionBackground.setColor(backgroundColor1);
         colorActionBackground.setEndColor(backgroundColor2);
     }
 
+    // gets the color values for the ball, path, and background
     private void getColor(int score) {
         if(score < 1000) {
-            // white / black
             primaryColor.set(Color.valueOf("#FAFAFA"));
             secondaryColor.set(Color.valueOf("#9E9E9E"));
             accentColor.set(Color.valueOf("#555555"));
             backgroundColor1.set(Color.valueOf("#000000"));
-            backgroundColor2.set(Color.valueOf("#0261ef"));
+            backgroundColor2.set(Color.valueOf("#009999"));
         }
 
         else if(score < 2000) {
-            primaryColor.set(Color.valueOf("#32f202"));
-            secondaryColor.set(Color.valueOf("#2bbf01"));
-            accentColor.set(Color.valueOf("#ef2502"));
-            backgroundColor1.set(Color.valueOf("#0261ef"));
-            backgroundColor2.set(Color.valueOf("#5c00bf"));
-            // yellow
-            /*
-            primaryColor.set(Color.valueOf("#FFEB3B"));
-            secondaryColor.set(Color.valueOf("#FBC02D"));
-            accentColor.set(Color.valueOf("#ff3b62"));
-            backgroundColor1.set(Color.valueOf("#3b89ff"));
-            backgroundColor2.set(Color.valueOf("#FF42A7"));
-            */
+            primaryColor.set(Color.valueOf("#9FEE00"));
+            secondaryColor.set(Color.valueOf("#7BB800"));
+            accentColor.set(Color.valueOf("#FF00900"));
+            backgroundColor1.set(Color.valueOf("#009999"));
+            backgroundColor2.set(Color.valueOf("#1B1BB3"));
         }
 
         else if(score < 3000) {
-            // red
-            primaryColor.set(Color.valueOf("#ef0078"));
-            secondaryColor.set(Color.valueOf("#b00055"));
-            accentColor.set(Color.valueOf("#f1f500"));
-            backgroundColor1.set(Color.valueOf("#5c00bf"));
-            backgroundColor2.set(Color.valueOf("#ff9b04"));
-
-            // blue
-            /*
-            primaryColor.set(Color.valueOf("#42A5F5"));
-            secondaryColor.set(Color.valueOf("#1565C0"));
-            accentColor.set(Color.valueOf("#FF42A7"));
-            backgroundColor1.set(Color.valueOf("#d83bff"));
-            backgroundColor2.set(Color.valueOf("#BB0000"));
-            */
+            primaryColor.set(Color.valueOf("#00AF64"));
+            secondaryColor.set(Color.valueOf("#00874D"));
+            accentColor.set(Color.valueOf("#FF9200"));
+            backgroundColor1.set(Color.valueOf("#1B1BB3"));
+            backgroundColor2.set(Color.valueOf("#7109AA"));
         }
 
         else if(score < 4000) {
             // purple
-            primaryColor.set(Color.valueOf("#ff1d04"));
-            secondaryColor.set(Color.valueOf("#b81200"));
-            accentColor.set(Color.valueOf("#049bff"));
-            backgroundColor1.set(Color.valueOf("#ff9b04"));
-            backgroundColor2.set(Color.valueOf("#ffd900"));
+            primaryColor.set(Color.valueOf("#1240AB"));
+            secondaryColor.set(Color.valueOf("#0D3184"));
+            accentColor.set(Color.valueOf("#FFD300"));
+            backgroundColor1.set(Color.valueOf("#7109AA"));
+            backgroundColor2.set(Color.valueOf("#E40045"));
         }
 
         else if(score < 5000) {
-            // orange
-            primaryColor.set(Color.valueOf("#00d0ff"));
-            secondaryColor.set(Color.valueOf("#03a3c7"));
-            accentColor.set(Color.valueOf("#ff0d00"));
-            backgroundColor1.set(Color.valueOf("#4db800"));
-            backgroundColor2.set(Color.valueOf("#FFFFFF"));
+            primaryColor.set(Color.valueOf("#530FAD"));
+            secondaryColor.set(Color.valueOf("#3E0B86"));
+            accentColor.set(Color.valueOf("#CCF600"));
+            backgroundColor1.set(Color.valueOf("#E40045"));
+            backgroundColor2.set(Color.valueOf("#FF7400"));
         }
 
         else if(score < 6000) {
-
+            primaryColor.set(Color.valueOf("#CD0074"));
+            secondaryColor.set(Color.valueOf("#9E0059"));
+            accentColor.set(Color.valueOf("#00CC00"));
+            backgroundColor1.set(Color.valueOf("#FF7400"));
+            backgroundColor2.set(Color.valueOf("#FFFFFF"));
         }
 
         else {
-            // black
             primaryColor.set(Color.valueOf("#424242"));
             secondaryColor.set(Color.valueOf("#000000"));
             accentColor.set(Color.valueOf("#e0e0e0"));
             backgroundColor1.set(Color.valueOf("#FFFFFF"));
             backgroundColor2.set(Color.valueOf("#FFFFFF"));
         }
-
     }
 
     @Override
@@ -731,6 +706,8 @@ public class GameScreen implements Screen, InputProcessor{
     public void dispose() {
         pathTexture.dispose();
         pathSide.dispose();
+        fontGenerator.dispose();
+        fade.dispose();
         scoreFont.dispose();
         textFont.dispose();
         scoreRect.dispose();

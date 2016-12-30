@@ -10,6 +10,7 @@ public class Fall extends com.badlogic.gdx.Game {
     public void create() {
         batch = new SpriteBatch();
         font = new BitmapFont();
+        dispose();
         this.setScreen(new MainMenuScreen(this));
     }
 
