@@ -85,7 +85,7 @@ public class GameScreen implements Screen, InputProcessor{
     private static Vector2[] drawnPoints;               // points drawn between control points
     private static Vector2[] cp;                        // control points for spline
 
-    private static final int k = 9 * 16;                // number of points drawn in spine
+    private static final int k = 300;                   // number of points drawn in spine
     private static final int numPointsPath = 9;         // number of control points in spline
     private static int pointsYDiff;                     // vertical spacing between each control points
     private static int pathWidth;
@@ -125,7 +125,6 @@ public class GameScreen implements Screen, InputProcessor{
     private static TextButton.TextButtonStyle endButtonStyle;
     Timer timer;
     private static Timer.Task clickTimerRestart, clickTimerQuit;
-
 
     public GameScreen(final Fall game) {
         this.fall = game;
@@ -568,7 +567,7 @@ public class GameScreen implements Screen, InputProcessor{
     }
 
     // returns the current speed
-    private float calcSpeed() { return (float)Math.pow(t, 1.55) * 0.2f; }
+    private float calcSpeed() { return (float)Math.pow(t, 1.55) * 0.25f; }
 
     // returns the current score, distance
     private float calcDistance() { return t * 50; }
@@ -609,10 +608,10 @@ public class GameScreen implements Screen, InputProcessor{
         for(int i = 0; i < k; i++) {
             // points to left and right are the middle of the path plus or minus the angles
             // because the vectors are equal length, path width is preserved
-            left[i][0] = (int)(drawnPoints[i].x + pointAngles[i].x);
-            left[i][1] = (int)(drawnPoints[i].y + pointAngles[i].y);
-            right[i][0] = (int)(drawnPoints[i].x - pointAngles[i].x);
-            right[i][1] = (int)(drawnPoints[i].y - pointAngles[i].y);
+            left[i][0] = drawnPoints[i].x + pointAngles[i].x;
+            left[i][1] = drawnPoints[i].y + pointAngles[i].y;
+            right[i][0] = drawnPoints[i].x - pointAngles[i].x;
+            right[i][1] = drawnPoints[i].y - pointAngles[i].y;
         }
     }
 

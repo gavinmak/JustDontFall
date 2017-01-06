@@ -4,15 +4,22 @@ import com.badlogic.gdx.*;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
+import com.badlogic.gdx.scenes.scene2d.ui.ImageButton;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.utils.Scaling;
 
 /**
  * Created by gavin on 12/24/16.
@@ -31,13 +38,10 @@ public class MainMenuScreen implements Screen{
     private boolean fadeStarted = false;
 
     private int bestScore;
-    private static String startMessage = "";
-    private static BitmapFont textFont, scoreFont, startFont;
-    private static GlyphLayout scoreGlyph;
-
-    private static TextButton.TextButtonStyle style;
-    private static TextButton startButton;
-
+    private static BitmapFont scoreFont;
+    private static Image logo;
+    private static ImageButton startButton;
+    private static Label score;
 
     public MainMenuScreen(final Fall gam) {
         this.fall = gam;
@@ -49,40 +53,27 @@ public class MainMenuScreen implements Screen{
         table.padBottom(screenHeight / 8);
         stage.addActor(table);
 
+        logo = new Image(new Texture(Gdx.files.internal("justdontfall.png")));
+        logo.setScaling(Scaling.fit);
+        table.add(logo).expand().top().left().fill().pad(screenWidth / 16).row();
+
         Preferences prefs = Gdx.app.getPreferences("justdontfall");
         bestScore = prefs.getInteger("hi", 0);
-
         FreeTypeFontGenerator textGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontGenerator.FreeTypeFontParameter textParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        textParameter.size = (int)(screenWidth * 0.25);
-        textParameter.color = Color.valueOf("#212121");
-        textFont = textGenerator.generateFont(textParameter);
-
         textParameter.size = (int)(screenWidth * 0.3);
         textParameter.color = getColor(bestScore);
         scoreFont = textGenerator.generateFont(textParameter);
+        textGenerator.dispose();
 
-        scoreGlyph = new GlyphLayout(scoreFont, "" + bestScore);
-
-        randWord();
+        score = new Label("" + bestScore, new Label.LabelStyle(scoreFont, getColor(bestScore)));
+        table.add(score).expand().row();
 
         fade = new ShapeRenderer();
         camera = new OrthographicCamera();
         camera.setToOrtho(false, screenWidth, screenHeight);
 
-        startFont = new BitmapFont();
-        textParameter.size = (int)(screenWidth * 0.2);
-        startFont = textGenerator.generateFont(textParameter);
-        textGenerator.dispose();
-
-        style = new TextButton.TextButtonStyle();
-        style.font = startFont;
-        style.fontColor = Color.BLACK;
-        style.downFontColor = getColor(bestScore);
-
-        startButton = new TextButton(startMessage, style);
-        startButton.padRight(screenWidth / 16);
-        startButton.setY(screenHeight / 8);
+        startButton = new ImageButton(new TextureRegionDrawable(new TextureRegion(new Texture(Gdx.files.internal("start.png")))));
         startButton.addListener(new InputListener() {
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
@@ -91,7 +82,7 @@ public class MainMenuScreen implements Screen{
             }
         });
 
-        table.add(startButton).expand().bottom().right();
+        table.add(startButton).expand().bottom().right().fill().padLeft(screenWidth / 3).padTop(screenHeight / 16);
 
         Gdx.input.setInputProcessor(stage);
     }
@@ -102,11 +93,6 @@ public class MainMenuScreen implements Screen{
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         camera.update();
         fall.batch.setProjectionMatrix(camera.combined);
-
-        fall.batch.begin();
-        textFont.draw(fall.batch, "just dont\n fall.", screenWidth * 0.05f, screenHeight * 0.9f);
-        scoreFont.draw(fall.batch, "" + bestScore, (screenWidth - scoreGlyph.width) * 0.5f, screenHeight * 0.55f);
-        fall.batch.end();
 
         stage.draw();
 
@@ -127,19 +113,6 @@ public class MainMenuScreen implements Screen{
         if(alpha > 1.2) {
             fall.setScreen(new GameScreen(fall));
             dispose();
-        }
-    }
-
-    // picks a random phrase for the start message
-    private static void randWord() {
-        int r = (int)Math.floor(Math.random() * 6);
-        switch (r) {
-            case 0: startMessage = ">okay"; break;
-            case 1: startMessage = ">i wont"; break;
-            case 2: startMessage = ">alright"; break;
-            case 3: startMessage = ">sure"; break;
-            case 4: startMessage = ">k"; break;
-            case 5: startMessage = ">lets go"; break;
         }
     }
 
@@ -172,7 +145,6 @@ public class MainMenuScreen implements Screen{
         else {
             return Color.valueOf("#e0e0e0");
         }
-
     }
 
     @Override
@@ -200,11 +172,9 @@ public class MainMenuScreen implements Screen{
 
     }
 
-
     @Override
     public void dispose() {
         stage.dispose();
-        textFont.dispose();
         scoreFont.dispose();
     }
 }
